@@ -84,10 +84,80 @@ def compute_analysis(data: pd.DataFrame):
     return eq_cols, rows_with_nomatch, nomatch_dist, match_counts
 
 
+@st.cache_data
+def compute_field_stats(data: pd.DataFrame):
+    """Return per-field match statistics and overall counts."""
+    eq_cols = [c for c in data.columns if "IsEquals" in c]
+    rows = len(data)
+    stats = []
+    total_match = total_no_match = total_both_null = 0
+
+    for col in eq_cols:
+        base = col.replace("_IsEquals", "")
+        crm_col = f"{base}_CRM"
+        bi_col = f"{base}_BI"
+
+        match_series = data[col].apply(normalize_bool)
+        match_count = int(match_series.sum())
+        both_null_count = 0
+        if crm_col in data.columns and bi_col in data.columns:
+            both_null_count = int(
+                (data[crm_col].isnull() & data[bi_col].isnull()).sum()
+            )
+        no_match_count = rows - match_count - both_null_count
+
+        stats.append(
+            {
+                "field": base,
+                "match": match_count,
+                "no_match": no_match_count,
+                "both_null": both_null_count,
+                "match_rate": round(match_count / rows * 100, 2) if rows else 0,
+            }
+        )
+
+        total_match += match_count
+        total_no_match += no_match_count
+        total_both_null += both_null_count
+
+    overall = {
+        "match": total_match,
+        "no_match": total_no_match,
+        "both_null": total_both_null,
+    }
+
+    return pd.DataFrame(stats), overall
+
+
+def compute_heatmap_status(data: pd.DataFrame, eq_cols):
+    """Return dataframe of match status for heatmap visualisation."""
+    status_df = pd.DataFrame(index=data.index)
+    for col in eq_cols:
+        base = col.replace("_IsEquals", "")
+        crm_col = f"{base}_CRM"
+        bi_col = f"{base}_BI"
+
+        match_series = data[col].apply(normalize_bool)
+        if crm_col in data.columns and bi_col in data.columns:
+            both_null = data[crm_col].isnull() & data[bi_col].isnull()
+        else:
+            both_null = pd.Series(False, index=data.index)
+
+        status = pd.Series("No Match", index=data.index)
+        status[match_series] = "Match"
+        status[both_null] = "Both Null"
+
+        status_df[base] = status
+
+    return status_df
+
+
 if uploaded_file is not None:
     df = load_accounts_file(uploaded_file)
 
     eq_cols, rows_with_nomatch, nomatch_dist, match_counts = compute_analysis(df)
+    field_stats, overall_counts = compute_field_stats(df)
+    heatmap_status = compute_heatmap_status(df, eq_cols) if eq_cols else pd.DataFrame()
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total rows", len(df))
@@ -122,9 +192,7 @@ if uploaded_file is not None:
 
     if not match_counts.empty:
         st.write("## Match vs no match by equality column")
-        match_melt = match_counts.melt(
-            id_vars="column", value_name="count", var_name="match"
-        )
+        match_melt = match_counts.melt(id_vars="column", value_name="count", var_name="match")
         fig = px.bar(
             match_melt,
             x="column",
@@ -134,6 +202,56 @@ if uploaded_file is not None:
             title="Match vs No Match counts",
             color_discrete_sequence=ASSOCIATED_COLORS[:2],
         )
+        st.plotly_chart(fig, use_container_width=True)
+
+    if not field_stats.empty:
+        st.write("## Match rate by field")
+        fig = px.bar(
+            field_stats,
+            x="field",
+            y="match_rate",
+            title="Match rate per field (%)",
+            color_discrete_sequence=[ASSOCIATED_COLORS[0]],
+        )
+        fig.update_yaxes(range=[0, 100])
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.write("## Detailed match status by field")
+        status_melt = field_stats.melt(id_vars="field", value_vars=["match", "no_match", "both_null"], var_name="status", value_name="count")
+        fig = px.bar(
+            status_melt,
+            x="field",
+            y="count",
+            color="status",
+            barmode="stack",
+            title="Match / No Match / Both Null",
+            color_discrete_sequence=ASSOCIATED_COLORS[:3],
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.write("## Overall correspondence distribution")
+        pie_df = pd.DataFrame([overall_counts])
+        pie_df = pie_df.melt(var_name="status", value_name="count")
+        fig = px.pie(
+            pie_df,
+            names="status",
+            values="count",
+            title="Overall Match vs No Match vs Both Null",
+            color_discrete_sequence=ASSOCIATED_COLORS[:3],
+        )
+        fig.update_traces(hole=0.4)
+        st.plotly_chart(fig, use_container_width=True)
+
+    if not heatmap_status.empty:
+        st.write("## Match matrix by row and field")
+        heatmap_numeric = heatmap_status.replace({"Match": 1, "No Match": -1, "Both Null": 0})
+        fig = px.imshow(
+            heatmap_numeric,
+            color_continuous_scale=["#d7191c", "#fdae61", "#abdda4"],
+            aspect="auto",
+        )
+        fig.update_xaxes(title="Field")
+        fig.update_yaxes(title="Row index")
         st.plotly_chart(fig, use_container_width=True)
 
     with st.sidebar:
