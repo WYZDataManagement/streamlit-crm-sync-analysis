@@ -152,6 +152,49 @@ def compute_heatmap_status(data: pd.DataFrame, eq_cols):
     return status_df
 
 
+def emergency_data_diagnosis(df: pd.DataFrame) -> None:
+    """Display emergency diagnostic charts."""
+
+    if "name_CRM" in df.columns and "name_BI" in df.columns:
+        df["name_CRM_length"] = df["name_CRM"].astype(str).str.len()
+        df["name_BI_length"] = df["name_BI"].astype(str).str.len()
+        scatter = px.scatter(
+            df,
+            x="name_CRM_length",
+            y="name_BI_length",
+            title="Longueur des noms CRM vs BI",
+        )
+        st.plotly_chart(scatter, use_container_width=True)
+
+        from difflib import SequenceMatcher
+
+        similarity = df.apply(
+            lambda row: SequenceMatcher(None, str(row["name_CRM"]), str(row["name_BI"])).ratio(),
+            axis=1,
+        )
+        similarity_fig = px.histogram(
+            similarity,
+            nbins=50,
+            title="Distribution de similarité (SequenceMatcher)",
+        )
+        st.plotly_chart(similarity_fig, use_container_width=True)
+
+        patterns = {
+            "Contient parenthèses": df["name_CRM"].str.contains(r"\(", na=False).sum(),
+            "Tout en majuscules": df["name_CRM"].str.isupper().sum(),
+            "Contient chiffres": df["name_CRM"].str.contains(r"\d", na=False).sum(),
+            "Valeurs nulles": df["name_CRM"].isnull().sum(),
+        }
+        pattern_df = pd.DataFrame(list(patterns.items()), columns=["Pattern", "Count"])
+        pattern_fig = px.bar(pattern_df, x="Pattern", y="Count", title="Patterns détectés dans name_CRM")
+        st.plotly_chart(pattern_fig, use_container_width=True)
+
+    type_counts = df.dtypes.astype(str).value_counts().reset_index()
+    type_counts.columns = ["Type", "Count"]
+    type_fig = px.bar(type_counts, x="Type", y="Count", title="Distribution des types de données")
+    st.plotly_chart(type_fig, use_container_width=True)
+
+
 if uploaded_file is not None:
     df = load_accounts_file(uploaded_file)
 
@@ -164,111 +207,7 @@ if uploaded_file is not None:
     col2.metric("Rows with ≥1 no match", rows_with_nomatch)
     col3.metric("Equality columns", len(eq_cols))
 
-    if not nomatch_dist.empty:
-        st.write("## No match counts per row")
-        fig = px.bar(
-            nomatch_dist,
-            x="no_match_count",
-            y="row_count",
-            title="Rows by number of no matches",
-            color_discrete_sequence=[ASSOCIATED_COLORS[0]],
-        )
-        fig.update_xaxes(title="Number of no matches")
-        fig.update_yaxes(title="Row count")
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.write("## Null values per column")
-    null_counts = df.isnull().sum().reset_index()
-    null_counts.columns = ["column", "null_count"]
-    fig = px.bar(
-        null_counts,
-        x="column",
-        y="null_count",
-        title="Null values by column",
-        color_discrete_sequence=ASSOCIATED_COLORS,
-    )
-    fig.update_yaxes(range=[0, null_counts["null_count"].max() + 1])
-    st.plotly_chart(fig, use_container_width=True)
-
-    if not match_counts.empty:
-        st.write("## Match vs no match by equality column")
-        match_melt = match_counts.melt(id_vars="column", value_name="count", var_name="match")
-        fig = px.bar(
-            match_melt,
-            x="column",
-            y="count",
-            color="match",
-            barmode="group",
-            title="Match vs No Match counts",
-            color_discrete_sequence=ASSOCIATED_COLORS[:2],
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    if not field_stats.empty:
-        st.write("## Match rate by field")
-        fig = px.bar(
-            field_stats,
-            x="field",
-            y="match_rate",
-            title="Match rate per field (%)",
-            color_discrete_sequence=[ASSOCIATED_COLORS[0]],
-        )
-        fig.update_yaxes(range=[0, 100])
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.write("## Detailed match status by field")
-        status_melt = field_stats.melt(id_vars="field", value_vars=["match", "no_match", "both_null"], var_name="status", value_name="count")
-        fig = px.bar(
-            status_melt,
-            x="field",
-            y="count",
-            color="status",
-            barmode="stack",
-            title="Match / No Match / Both Null",
-            color_discrete_sequence=ASSOCIATED_COLORS[:3],
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.write("## Overall correspondence distribution")
-        pie_df = pd.DataFrame([overall_counts])
-        pie_df = pie_df.melt(var_name="status", value_name="count")
-        fig = px.pie(
-            pie_df,
-            names="status",
-            values="count",
-            title="Overall Match vs No Match vs Both Null",
-            color_discrete_sequence=ASSOCIATED_COLORS[:3],
-        )
-        fig.update_traces(hole=0.4)
-        st.plotly_chart(fig, use_container_width=True)
-
-    if not heatmap_status.empty:
-        st.write("## Match matrix by row and field")
-        heatmap_numeric = heatmap_status.replace({"Match": 1, "No Match": -1, "Both Null": 0})
-        fig = px.imshow(
-            heatmap_numeric,
-            color_continuous_scale=["#d7191c", "#fdae61", "#abdda4"],
-            aspect="auto",
-        )
-        fig.update_xaxes(title="Field")
-        fig.update_yaxes(title="Row index")
-        st.plotly_chart(fig, use_container_width=True)
-
-    with st.sidebar:
-        selected_eq = st.selectbox("Select column for distribution", options=eq_cols)
-        apply_distribution = st.button("Apply")
-
-    if eq_cols and apply_distribution:
-        counts = df[selected_eq].astype(str).value_counts(dropna=False).reset_index()
-        counts.columns = [selected_eq, "count"]
-        fig = px.bar(
-            counts,
-            x=selected_eq,
-            y="count",
-            title=f"{selected_eq} distribution",
-            color_discrete_sequence=[ASSOCIATED_COLORS[0]],
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    emergency_data_diagnosis(df)
 
     st.write("## Data Preview")
     st.dataframe(df)
