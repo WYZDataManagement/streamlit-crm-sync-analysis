@@ -1,0 +1,8 @@
+secret.env
+*.msi
+__pycache__/
+*.py[cod]
+*.sqlite3
+.streamlit/
+venv/
+.env/

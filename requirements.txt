@@ -1,0 +1,7 @@
+streamlit
+pyodbc
+pandas
+plotly
+scikit-learn
+SQLAlchemy
+python-dotenv
