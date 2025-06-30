@@ -4,5 +4,6 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 .streamlit/
+!.streamlit/config.toml
 venv/
 .env/
