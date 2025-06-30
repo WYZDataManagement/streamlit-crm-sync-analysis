@@ -1,6 +1,31 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import csv
+
+def load_accounts_file(uploaded_file: st.runtime.uploaded_file_manager.UploadedFile) -> pd.DataFrame:
+    """Load uploaded Accounts file handling malformed CSV lines."""
+    if uploaded_file.name.endswith(".csv"):
+        sample = uploaded_file.read(1024)
+        uploaded_file.seek(0)
+        try:
+            delimiter = csv.Sniffer().sniff(sample.decode("utf-8", errors="ignore")).delimiter
+        except Exception:
+            delimiter = ","
+
+        try:
+            df = pd.read_csv(
+                uploaded_file,
+                sep=delimiter,
+                engine="python",
+                on_bad_lines="skip",
+            )
+        finally:
+            uploaded_file.seek(0)
+    else:
+        df = pd.read_excel(uploaded_file)
+
+    return df
 
 st.set_page_config(page_title="Accounts", page_icon="WYZ-Etoile-Bleu 1.png", layout="wide")
 
@@ -22,10 +47,7 @@ uploaded_file = st.sidebar.file_uploader(
 )
 
 if uploaded_file is not None:
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file, sep=None, engine="python")
-    else:
-        df = pd.read_excel(uploaded_file)
+    df = load_accounts_file(uploaded_file)
 
     st.write("## Filter Data")
     filter_column = st.selectbox("Select column to filter", options=df.columns)
