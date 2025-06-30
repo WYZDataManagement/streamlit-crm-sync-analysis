@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Account", page_icon="📊")
+st.set_page_config(page_title="Accounts", page_icon="📊", layout="wide")
 
 ASSOCIATED_COLORS = [
     "#7fbfdc",
@@ -13,17 +13,17 @@ ASSOCIATED_COLORS = [
     "#45b49d",
 ]
 
-st.title("Account Data Analysis")
+st.title("Accounts Data Analysis")
 
-uploaded_file = st.file_uploader(
-    "Upload Account file (xlsx or csv)",
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Accounts file (xlsx or csv)",
     type=["xlsx", "csv"],
     help="Upload an Excel or CSV file with Account data",
 )
 
 if uploaded_file is not None:
     if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file, sep=None, engine="python")
     else:
         df = pd.read_excel(uploaded_file)
 
@@ -60,5 +60,5 @@ if uploaded_file is not None:
         )
         st.plotly_chart(fig, use_container_width=True)
 else:
-    st.info("Please upload an Account file to see analysis.")
+    st.info("Please upload an Accounts file to see analysis.")
 
