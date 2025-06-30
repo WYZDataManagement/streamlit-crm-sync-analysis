@@ -27,8 +27,14 @@ if uploaded_file is not None:
     else:
         df = pd.read_excel(uploaded_file)
 
-    st.write("## Data Preview")
-    st.dataframe(df.head())
+    st.write("## Filter Data")
+    filter_column = st.selectbox("Select column to filter", options=df.columns)
+    filter_values = st.multiselect(
+        "Select values", options=sorted(df[filter_column].dropna().unique())
+    )
+    filtered_df = (
+        df[df[filter_column].isin(filter_values)] if filter_values else df
+    )
 
     st.write("## Null values per column")
     null_counts = df.isnull().sum().reset_index()
@@ -40,25 +46,32 @@ if uploaded_file is not None:
         title="Null values by column",
         color_discrete_sequence=ASSOCIATED_COLORS,
     )
+    fig.update_yaxes(range=[0, null_counts["null_count"].max() + 1])
     st.plotly_chart(fig, use_container_width=True)
 
-    equality_columns = [
-        c
-        for c in df.columns
-        if "IsEquals" in c or c.endswith("_phone")
-    ]
-
-    for i, col in enumerate(equality_columns[:14], start=1):
-        counts = df[col].value_counts(dropna=False).reset_index()
-        counts.columns = [col, "count"]
+    equality_columns = [c for c in df.columns if "IsEquals" in c]
+    if equality_columns:
+        st.write("## Distribution")
+        selected_eq = st.selectbox(
+            "Select column for distribution", options=equality_columns
+        )
+        counts = (
+            filtered_df[selected_eq]
+            .value_counts(dropna=False)
+            .reset_index()
+        )
+        counts.columns = [selected_eq, "count"]
         fig = px.bar(
             counts,
-            x=col,
+            x=selected_eq,
             y="count",
-            title=f"{col} distribution",
-            color_discrete_sequence=[ASSOCIATED_COLORS[i % len(ASSOCIATED_COLORS)]],
+            title=f"{selected_eq} distribution",
+            color_discrete_sequence=[ASSOCIATED_COLORS[0]],
         )
         st.plotly_chart(fig, use_container_width=True)
+
+    st.write("## Data Preview")
+    st.dataframe(filtered_df)
 else:
     st.info("Please upload an Accounts file to see analysis.")
 
