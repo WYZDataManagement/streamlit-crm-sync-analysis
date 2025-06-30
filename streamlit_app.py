@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Accounts", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Accounts", page_icon="WYZ-Etoile-Bleu 1.png", layout="wide")
 
 ASSOCIATED_COLORS = [
     "#7fbfdc",
