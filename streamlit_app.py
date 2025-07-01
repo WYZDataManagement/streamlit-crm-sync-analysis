@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 import re
 from functools import lru_cache
 
-# Configuration de la page pour optimiser les performances
+
 st.set_page_config(
     page_title="Analyse Qualité des Données CRM vs BI", 
     page_icon="WYZ-Etoile-Bleu 1.png", 
@@ -72,15 +72,13 @@ def compute_comprehensive_analysis(data):
     total_rows = len(data)
     field_stats = []
     detailed_stats = []
-    field_debug_data = []  # Pour stocker les données de debug par champ
-    
-    # Calcul des lignes avec écarts (basé sur la version fonctionnelle)
+    field_debug_data = []  
     rows_with_nomatch = 0
     if eq_cols:
         has_nomatch_per_row = pd.Series(False, index=data.index)
         
         for col in eq_cols:
-            # Lecture directe des valeurs "No Match"
+
             col_values = data[col].astype(str).str.strip().str.lower()
             no_match_series = col_values.isin({"no match", "nomatch", "no_match", "false", "0", "no", "n", "f"})
             has_nomatch_per_row |= no_match_series
@@ -89,18 +87,18 @@ def compute_comprehensive_analysis(data):
     
     rows_iso = total_rows - rows_with_nomatch
     
-    # Analyse chaque champ de comparaison avec la nouvelle logique
+
     for col in eq_cols:
-        # Trouver l'index de la colonne IsEquals
+
         col_index = data.columns.get_loc(col)
         
-        # Vérifier qu'il y a au moins 2 colonnes avant
+
         if col_index < 2:
             continue
             
         # Récupérer les 2 colonnes précédentes
-        col_before_1 = data.columns[col_index - 2]  # 2 colonnes avant
-        col_before_2 = data.columns[col_index - 1]  # 1 colonne avant
+        col_before_1 = data.columns[col_index - 2]  
+        col_before_2 = data.columns[col_index - 1] 
         
         # Identifier quelle colonne est CRM et laquelle est BI
         if "_CRM" in col_before_1 and "_BI" in col_before_2:
@@ -110,10 +108,10 @@ def compute_comprehensive_analysis(data):
             crm_col = col_before_2
             bi_col = col_before_1
         else:
-            # Si on ne peut pas identifier CRM/BI, passer au suivant
+
             continue
         
-        # Calculs de base (logique existante)
+
         match_series = data[col].apply(normalize_bool)
         match_count = int(match_series.sum())
         
@@ -138,29 +136,29 @@ def compute_comprehensive_analysis(data):
         }
         
         if no_match_count > 0:
-            # Filtrer les lignes avec No Match
+
             no_match_mask = ~match_series & ~both_null_series
             no_match_data = data[no_match_mask]
             
             debug_info['filtered_count'] = len(no_match_data)
             
             if len(no_match_data) > 0:
-                # Stocker un échantillon pour le debug
+
                 sample_cols = [crm_col, bi_col, col]
                 debug_info['sample_data'] = no_match_data[sample_cols].head(10)
                 
-                # Analyser chaque ligne No Match
+
                 for idx, row in no_match_data.iterrows():
                     crm_val = row[crm_col]
                     bi_val = row[bi_col]
                     
-                    # CRM vide/null mais BI a une valeur
+
                     if (pd.isna(crm_val) or str(crm_val).strip() == '') and (pd.notna(bi_val) and str(bi_val).strip() != ''):
                         crm_null_bi_value += 1
-                    # BI vide/null mais CRM a une valeur
+
                     elif (pd.isna(bi_val) or str(bi_val).strip() == '') and (pd.notna(crm_val) and str(crm_val).strip() != ''):
                         bi_null_crm_value += 1
-                    # Les deux ont des valeurs différentes (non vides)
+
                     elif (pd.notna(crm_val) and str(crm_val).strip() != '') and (pd.notna(bi_val) and str(bi_val).strip() != ''):
                         different_values += 1
                     else:
@@ -197,7 +195,7 @@ def compute_comprehensive_analysis(data):
     field_stats_df = pd.DataFrame(field_stats)
     detailed_stats_df = pd.DataFrame(detailed_stats)
     
-    # Calcul global avec séparation des types de No Match
+
     total_match = int(field_stats_df['match'].sum()) if not field_stats_df.empty else 0
     total_both_null = int(field_stats_df['both_null'].sum()) if not field_stats_df.empty else 0
     total_crm_null = int(detailed_stats_df['crm_null_bi_value'].sum()) if not detailed_stats_df.empty else 0
@@ -223,7 +221,7 @@ def create_quality_metrics_dashboard(field_stats_df, overall_stats):
     """Create quality metrics dashboard with detailed breakdown."""
     st.markdown("## 📊 Métriques de qualité globales")
     
-    # Vérifier que toutes les clés existent avec des valeurs par défaut
+
     total_match = overall_stats.get('total_match', 0)
     total_both_null = overall_stats.get('total_both_null', 0)
     total_crm_null = overall_stats.get('total_crm_null', 0)
@@ -341,7 +339,7 @@ def create_field_analysis_charts(field_stats_df):
 
 def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
     """Create advanced analytics with business rules."""
-    st.markdown("## 🎯 Analyses avancées")
+    st.markdown("## 🔬 Analyses avancées")
     
     if field_stats_df.empty or detailed_stats_df.empty:
         st.warning("Pas de données pour l'analyse avancée")
@@ -351,7 +349,6 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
     st.markdown("### 📊 Répartition détaillée par champ et type")
     
     try:
-        # Préparer les données pour le graphique empilé
         detailed_data = []
         for _, row in detailed_stats_df.iterrows():
             detailed_data.extend([
@@ -387,17 +384,17 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
     except Exception as e:
         st.error(f"Erreur dans le graphique détaillé: {str(e)}")
     
-    # Matrice de priorisation avec règles business
+    # Matrice de priorisation 
     st.markdown("### 🎯 Matrice de priorisation")
     
     try:
-        # Calculs avec règles business
+
         df_priority = detailed_stats_df.copy()
         df_priority['total_records'] = (df_priority['match'] + df_priority['both_null'] + 
                                       df_priority['crm_null_bi_value'] + df_priority['bi_null_crm_value'] + 
                                       df_priority['different_values'])
         
-        # Éviter la division par zéro
+
         df_priority['total_records'] = df_priority['total_records'].replace(0, 1)
         
         # Règle 1: Plus de Both Null = Plus de complexité
@@ -406,7 +403,7 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
         # Règle 2: Plus de valeurs différentes = Plus d'impact métier  
         df_priority['different_values_rate'] = df_priority['different_values'] / df_priority['total_records']
         
-        # Calcul de la complexité (1-5) basé sur le taux de Both Null
+
         df_priority['fix_complexity'] = np.where(
             df_priority['both_null_rate'] == 0, 1,  # Pas de Both Null = facile
             np.where(df_priority['both_null_rate'] <= 0.1, 2,  # Peu de Both Null = assez facile
@@ -414,7 +411,7 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
             np.where(df_priority['both_null_rate'] <= 0.6, 4, 5)))  # Beaucoup = difficile
         )
         
-        # Calcul de l'impact métier (0-5) basé sur le taux de valeurs différentes
+
         df_priority['business_impact'] = df_priority['different_values_rate'] * 5
         
         fig_priority = px.scatter(
@@ -432,11 +429,11 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
             color_continuous_scale=[[0, "#7fbfdc"], [0.5, "#78b495"], [1, "#82b86a"]]
         )
         
-        # Lignes de référence
+
         fig_priority.add_hline(y=2.5, line_dash="dash", line_color="gray", annotation_text="Impact moyen")
         fig_priority.add_vline(x=3, line_dash="dash", line_color="gray", annotation_text="Complexité moyenne")
         
-        # Annotations des quadrants
+
         fig_priority.add_annotation(x=1.5, y=4, text="🚨 PRIORITÉ MAX<br>(Facile + Impact élevé)", 
                                    bgcolor="rgba(255,0,0,0.1)", bordercolor="red")
         fig_priority.add_annotation(x=4.5, y=4, text="🎯 PLANIFIER<br>(Difficile + Impact élevé)", 
@@ -491,9 +488,9 @@ def create_field_by_field_analysis(field_debug_data, selected_fields):
             
             st.write("---")
 
-# App Header
+
 st.markdown("""
-# 🎯 Analyse de Qualité des Données CRM vs BI
+#  Analyse de Qualité des Données CRM vs BI
 ### Diagnostic complet pour l'amélioration de la correspondance des données
 """)
 
@@ -512,14 +509,13 @@ with st.sidebar:
         st.markdown("## ⚙️ Options d'analyse")
         show_quality_metrics = st.checkbox("📊 Métriques de qualité globales", value=True)
         show_field_analysis = st.checkbox("📈 Analyse détaillée", value=True)
-        show_advanced = st.checkbox("🎯 Analyses avancées", value=True)
+        show_advanced = st.checkbox("🔬 Analyses avancées", value=True)
         show_field_by_field = st.checkbox("🔍 Analyse champ par champ", value=False)
         
         # Selectbox pour les champs à analyser (seulement si l'option est cochée)
         selected_fields = []
         if show_field_by_field:
             st.markdown("### 🎯 Sélection des champs")
-            # On récupère les colonnes IsEquals du fichier si il existe
             if 'df_loaded' in st.session_state:
                 df = st.session_state.df_loaded
                 eq_cols = [c for c in df.columns if "IsEquals" in c or "IsEqual" in c]
@@ -534,15 +530,15 @@ with st.sidebar:
         
         st.markdown("---")
         
-        # Bouton Appliquer avec style
+        # Bouton 
         apply_analysis = st.button(
-            "🚀 Appliquer l'analyse", 
+            " Appliquer l'analyse", 
             type="primary",
             use_container_width=True,
             help="Lancer l'analyse avec les options sélectionnées"
         )
         
-        # Initialiser la session state
+
         if 'analysis_applied' not in st.session_state:
             st.session_state.analysis_applied = False
         
@@ -554,21 +550,21 @@ with st.sidebar:
             st.session_state.show_field_by_field = show_field_by_field
             st.session_state.selected_fields = selected_fields
 
-# Main App Logic
+
 if uploaded_file is not None and st.session_state.get('analysis_applied', False):
     try:
-        # Optimisation : lire le fichier une seule fois
+
         if 'df_loaded' not in st.session_state or st.session_state.get('last_file_name') != uploaded_file.name:
             with st.spinner("🔄 Chargement du fichier..."):
                 file_bytes = uploaded_file.read()
-                uploaded_file.seek(0)  # Reset pour les prochaines lectures
+                uploaded_file.seek(0)  
                 df = load_accounts_file(file_bytes, uploaded_file.name)
                 st.session_state.df_loaded = df
                 st.session_state.last_file_name = uploaded_file.name
         else:
             df = st.session_state.df_loaded
         
-        # Analyse principale rapide
+
         with st.spinner("⚡ Analyse en cours..."):
             overall_stats, row_stats, field_stats_df, detailed_stats_df, field_debug_data = compute_comprehensive_analysis(df)
         
@@ -616,7 +612,7 @@ if uploaded_file is not None and st.session_state.get('analysis_applied', False)
             st.code(f"Message: {str(e)}")
 
 elif uploaded_file is not None and not st.session_state.get('analysis_applied', False):
-    st.info("👆 Configurez vos options d'analyse dans la barre latérale et cliquez sur **'🚀 Appliquer l'analyse'** pour commencer.")
+    st.info("👆 Configurez vos options d'analyse dans la barre latérale et cliquez sur **' Appliquer l'analyse'** pour commencer.")
 
 else:
     # Welcome screen
@@ -625,41 +621,14 @@ else:
     
     Cet outil vous permet d'analyser la qualité de correspondance entre vos données CRM et BI.
     
-    ### 🚀 Pour commencer:
+    ###  Pour commencer :
     1. **📁 Uploadez votre fichier** dans la barre latérale (Excel ou CSV)
     2. **⚙️ Configurez les options** d'analyse selon vos besoins
     3. **🚀 Cliquez sur "Appliquer l'analyse"** pour lancer le traitement
     4. **📊 Explorez les résultats** avec les graphiques interactifs
     
-    ### ⚡ Optimisations de performance:
-    - 🔄 **Mise en cache intelligente** des données
-    - 📊 **Calculs vectorisés** pour une analyse rapide
-    - 🎯 **Analyses à la demande** selon vos besoins
-    - 📈 **Analyse détaillée des écarts** par type
-    
-    ### 🎯 Fonctionnalités principales:
-    - ✅ **Analyse de correspondance** par champ
-    - 🎯 **Matrice de priorisation** intelligente
-    - 📊 **Métriques de qualité** détaillées
-    - 🔍 **Analyse des types d'écarts** (null vs différent)
-    
-    ### 📋 Format de fichier attendu:
-    Le fichier doit contenir des colonnes avec les suffixes:
-    - `_CRM` pour les données du système CRM
-    - `_BI` pour les données du système BI  
-    - `_IsEquals` pour les indicateurs de correspondance
-    
-    **Exemple**: `name_CRM`, `name_BI`, `name_IsEquals`
+    ### Optimisations de performance :
+    - 🔄 **Ce code n'est pas le plus optimisé possible, il est donc possible que la première analyse prenne 1 minute pour générer les différents graphiques**
     """)
     
-    # Sample data structure
-    st.markdown("### 📝 Exemple de structure de données:")
-    sample_data = pd.DataFrame({
-        'name_CRM': ['TOUYRE (LABESSERETTE)', 'PARIZE SAMMUEL'],
-        'name_BI': ['TOUYRE (LABESSERETTE)', 'PARIZE SAMMUEL'],
-        'name_IsEquals': ['Match', 'Match'],
-        'address1_city_CRM': ['LABESSERETTE', 'RUYNES EN MARGERIDE'],
-        'address1_city_BI': ['LABESSERETTE', 'RUYNES EN MARGERIDE'],
-        'address1_city_IsEquals': ['Match', 'Match']
-    })
-    st.dataframe(sample_data, use_container_width=True)
+   
