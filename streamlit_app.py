@@ -11,7 +11,7 @@ from functools import lru_cache
 
 
 st.set_page_config(
-    page_title="Analyse Qualité des Données CRM vs BI", 
+    page_title="Diagnostic CRM vs BI",
     page_icon="WYZ-Etoile-Bleu 1.png", 
     layout="wide",
     initial_sidebar_state="expanded"
@@ -490,7 +490,7 @@ def create_field_by_field_analysis(field_debug_data, selected_fields):
 
 
 st.markdown("""
-#  Analyse de Qualité des Données CRM vs BI
+# Diagnostic CRM vs BI
 ### Diagnostic complet pour l'amélioration de la correspondance des données
 """)
 
