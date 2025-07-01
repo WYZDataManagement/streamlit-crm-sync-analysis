@@ -67,11 +67,12 @@ def compute_comprehensive_analysis(data):
     eq_cols = [c for c in data.columns if "IsEquals" in c or "IsEqual" in c]
     
     if not eq_cols:
-        return {}, {}, pd.DataFrame(), pd.DataFrame()
+        return {}, {}, pd.DataFrame(), pd.DataFrame(), []
     
     total_rows = len(data)
     field_stats = []
     detailed_stats = []
+    field_debug_data = []  # Pour stocker les données de debug par champ
     
     # Calcul des lignes avec écarts (basé sur la version fonctionnelle)
     rows_with_nomatch = 0
@@ -112,12 +113,6 @@ def compute_comprehensive_analysis(data):
             # Si on ne peut pas identifier CRM/BI, passer au suivant
             continue
         
-        # DEBUG - Afficher les informations
-        st.write(f"🔍 **Analyse de {col}:**")
-        st.write(f"- Position: colonne {col_index}")
-        st.write(f"- Colonne CRM: {crm_col}")
-        st.write(f"- Colonne BI: {bi_col}")
-        
         # Calculs de base (logique existante)
         match_series = data[col].apply(normalize_bool)
         match_count = int(match_series.sum())
@@ -132,18 +127,27 @@ def compute_comprehensive_analysis(data):
         bi_null_crm_value = 0
         different_values = 0
         
+        debug_info = {
+            'col': col,
+            'col_index': col_index,
+            'crm_col': crm_col,
+            'bi_col': bi_col,
+            'no_match_count': no_match_count,
+            'sample_data': None,
+            'results': {}
+        }
+        
         if no_match_count > 0:
             # Filtrer les lignes avec No Match
             no_match_mask = ~match_series & ~both_null_series
             no_match_data = data[no_match_mask]
             
-            st.write(f"- Lignes No Match: {len(no_match_data)}")
+            debug_info['filtered_count'] = len(no_match_data)
             
             if len(no_match_data) > 0:
-                # Montrer un échantillon
-                st.write("**Échantillon des données No Match:**")
+                # Stocker un échantillon pour le debug
                 sample_cols = [crm_col, bi_col, col]
-                st.dataframe(no_match_data[sample_cols].head(10))
+                debug_info['sample_data'] = no_match_data[sample_cols].head(10)
                 
                 # Analyser chaque ligne No Match
                 for idx, row in no_match_data.iterrows():
@@ -162,11 +166,13 @@ def compute_comprehensive_analysis(data):
                     else:
                         different_values += 1
                 
-                st.write(f"**Résultats:**")
-                st.write(f"- CRM null / BI valeur: {crm_null_bi_value}")
-                st.write(f"- BI null / CRM valeur: {bi_null_crm_value}")
-                st.write(f"- Valeurs différentes: {different_values}")
-                st.write("---")
+                debug_info['results'] = {
+                    'crm_null_bi_value': crm_null_bi_value,
+                    'bi_null_crm_value': bi_null_crm_value,
+                    'different_values': different_values
+                }
+        
+        field_debug_data.append(debug_info)
         
         match_rate = (match_count / total_rows * 100) if total_rows > 0 else 0
         display_name = get_field_display_name(col)
@@ -211,7 +217,7 @@ def compute_comprehensive_analysis(data):
         'rows_iso': rows_iso
     }
     
-    return overall_stats, row_stats, field_stats_df, detailed_stats_df
+    return overall_stats, row_stats, field_stats_df, detailed_stats_df, field_debug_data
 
 def create_quality_metrics_dashboard(field_stats_df, overall_stats):
     """Create quality metrics dashboard with detailed breakdown."""
@@ -276,7 +282,7 @@ def create_quality_metrics_dashboard(field_stats_df, overall_stats):
 
 def create_field_analysis_charts(field_stats_df):
     """Create detailed field analysis charts - optimized."""
-    st.markdown("## 📈 Analyse détaillée par champ")
+    st.markdown("## 📈 Analyse détaillée")
     
     if field_stats_df.empty:
         st.warning("Aucune donnée d'analyse de champ disponible")
@@ -446,6 +452,45 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
     except Exception as e:
         st.error(f"Erreur dans la matrice de priorisation: {str(e)}")
 
+def create_field_by_field_analysis(field_debug_data, selected_fields):
+    """Create field by field analysis for selected fields."""
+    st.markdown("## 🔍 Analyse champ par champ")
+    
+    if not selected_fields:
+        st.info("Sélectionnez des champs dans la barre latérale pour voir l'analyse détaillée.")
+        return
+    
+    for debug_info in field_debug_data:
+        if debug_info['col'] in selected_fields:
+            st.write(f"### 🔍 **Analyse de {debug_info['col']}:**")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.write(f"**Position:** colonne {debug_info['col_index']}")
+            with col2:
+                st.write(f"**Colonne CRM:** {debug_info['crm_col']}")
+            with col3:
+                st.write(f"**Colonne BI:** {debug_info['bi_col']}")
+            
+            st.write(f"**Lignes No Match:** {debug_info['no_match_count']}")
+            
+            if debug_info.get('sample_data') is not None and not debug_info['sample_data'].empty:
+                st.write("**Échantillon des données No Match:**")
+                st.dataframe(debug_info['sample_data'], use_container_width=True)
+                
+                if debug_info['results']:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("CRM null / BI valeur", debug_info['results']['crm_null_bi_value'])
+                    with col2:
+                        st.metric("BI null / CRM valeur", debug_info['results']['bi_null_crm_value'])
+                    with col3:
+                        st.metric("Valeurs différentes", debug_info['results']['different_values'])
+            else:
+                st.info("Aucune donnée No Match pour ce champ")
+            
+            st.write("---")
+
 # App Header
 st.markdown("""
 # 🎯 Analyse de Qualité des Données CRM vs BI
@@ -466,8 +511,26 @@ with st.sidebar:
         
         st.markdown("## ⚙️ Options d'analyse")
         show_quality_metrics = st.checkbox("📊 Métriques de qualité globales", value=True)
-        show_field_analysis = st.checkbox("📈 Analyse détaillée par champ", value=True)
+        show_field_analysis = st.checkbox("📈 Analyse détaillée", value=True)
         show_advanced = st.checkbox("🎯 Analyses avancées", value=True)
+        show_field_by_field = st.checkbox("🔍 Analyse champ par champ", value=False)
+        
+        # Selectbox pour les champs à analyser (seulement si l'option est cochée)
+        selected_fields = []
+        if show_field_by_field:
+            st.markdown("### 🎯 Sélection des champs")
+            # On récupère les colonnes IsEquals du fichier si il existe
+            if 'df_loaded' in st.session_state:
+                df = st.session_state.df_loaded
+                eq_cols = [c for c in df.columns if "IsEquals" in c or "IsEqual" in c]
+                selected_fields = st.multiselect(
+                    "Choisir les champs à analyser en détail:",
+                    options=eq_cols,
+                    default=[],
+                    help="Sélectionnez les colonnes IsEquals que vous voulez analyser"
+                )
+            else:
+                st.info("Veuillez d'abord charger un fichier pour voir les champs disponibles")
         
         st.markdown("---")
         
@@ -488,6 +551,8 @@ with st.sidebar:
             st.session_state.show_quality_metrics = show_quality_metrics
             st.session_state.show_field_analysis = show_field_analysis
             st.session_state.show_advanced = show_advanced
+            st.session_state.show_field_by_field = show_field_by_field
+            st.session_state.selected_fields = selected_fields
 
 # Main App Logic
 if uploaded_file is not None and st.session_state.get('analysis_applied', False):
@@ -505,7 +570,7 @@ if uploaded_file is not None and st.session_state.get('analysis_applied', False)
         
         # Analyse principale rapide
         with st.spinner("⚡ Analyse en cours..."):
-            overall_stats, row_stats, field_stats_df, detailed_stats_df = compute_comprehensive_analysis(df)
+            overall_stats, row_stats, field_stats_df, detailed_stats_df, field_debug_data = compute_comprehensive_analysis(df)
         
         # Métriques de base
         col1, col2, col3, col4 = st.columns(4)
@@ -528,6 +593,10 @@ if uploaded_file is not None and st.session_state.get('analysis_applied', False)
         
         if st.session_state.get('show_advanced', True) and not field_stats_df.empty:
             create_advanced_analytics(df, field_stats_df, detailed_stats_df)
+        
+        if st.session_state.get('show_field_by_field', False):
+            selected_fields = st.session_state.get('selected_fields', [])
+            create_field_by_field_analysis(field_debug_data, selected_fields)
         
         # Aperçu des données
         st.markdown("## 👀 Aperçu des données")
