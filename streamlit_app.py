@@ -10,6 +10,7 @@ import re
 from functools import lru_cache
 
 
+
 st.set_page_config(
     page_title="Diagnostic CRM vs BI",
     page_icon="WYZ-Etoile-Bleu 1.png", 
