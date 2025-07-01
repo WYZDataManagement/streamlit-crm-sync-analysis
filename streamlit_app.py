@@ -77,22 +77,43 @@ def normalize_bool(val):
     val_str = str(val).strip().lower()
     return val_str in {"true", "1", "yes", "y", "t", "match"}
 
-@lru_cache(maxsize=100)
-def get_field_display_name(col):
-    """Convert IsEquals column name to display format like name(CRM)/company(BI) - cached."""
-    base_field = col.replace("_IsEquals", "").replace("_IsEqual", "")
-    
-    parts = base_field.split('_')
-    if len(parts) >= 2:
-        first_field = '_'.join(parts[:-1])
-        second_field = parts[-1]
-        return f"{first_field}(CRM)/{second_field}(BI)"
-    else:
-        return f"{base_field}(CRM)/{base_field}(BI)"
+def get_field_display_name_from_data(data, col):
+    """Convert IsEquals column name to display format using actual column names that precede it."""
+    try:
+        col_index = data.columns.get_loc(col)
+        
+        if col_index < 2:
+            return col  # Pas assez de colonnes précédentes
+            
+        # Récupérer les 2 colonnes précédentes
+        col_before_1 = data.columns[col_index - 2]  
+        col_before_2 = data.columns[col_index - 1] 
+        
+        # Identifier quelle colonne est CRM et laquelle est BI
+        if "_CRM" in col_before_1 and "_BI" in col_before_2:
+            crm_col = col_before_1
+            bi_col = col_before_2
+        elif "_BI" in col_before_1 and "_CRM" in col_before_2:
+            crm_col = col_before_2
+            bi_col = col_before_1
+        else:
+            # Si pas de suffixe CRM/BI clair, utiliser l'ordre
+            crm_col = col_before_1
+            bi_col = col_before_2
+        
+        # Nettoyer les noms des colonnes pour l'affichage
+        crm_clean = crm_col.replace("_CRM", "").replace("_crm", "")
+        bi_clean = bi_col.replace("_BI", "").replace("_bi", "")
+        
+        return f"{crm_clean}(CRM)/{bi_clean}(BI)"
+        
+    except Exception as e:
+        # En cas d'erreur, retourner le nom original
+        return col
 
 @st.cache_data(show_spinner=False)
 def compute_comprehensive_analysis(data):
-    """Compute comprehensive analysis of data quality - basé sur la version fonctionnelle."""
+    """Compute comprehensive analysis of data quality - avec correction des noms de champs."""
     eq_cols = [c for c in data.columns if "IsEquals" in c or "IsEqual" in c]
     
     if not eq_cols:
@@ -190,7 +211,9 @@ def compute_comprehensive_analysis(data):
         field_debug_data.append(debug_info)
         
         match_rate = (match_count / total_rows * 100) if total_rows > 0 else 0
-        display_name = get_field_display_name(col)
+        
+        # CORRECTION ICI : utiliser la nouvelle fonction pour le nom d'affichage
+        display_name = get_field_display_name_from_data(data, col)
         
         field_stats.append({
             'field': display_name,
@@ -604,7 +627,7 @@ if uploaded_files and any(f is not None for f in uploaded_files) and st.session_
                 
                 for file in valid_files:
                     file_bytes = file.read()
-                    file.seek(0)  # Reset file pointer for potential reuse
+                    file.seek(0)  
                     df_temp = load_accounts_file(file_bytes, file.name)
                     dataframes_list.append(df_temp)
                     st.success(f"✅ {file.name} chargé: {len(df_temp)} lignes")
@@ -686,7 +709,7 @@ elif uploaded_files and any(f is not None for f in uploaded_files) and not st.se
     st.info("👆 Configurez vos options d'analyse dans la barre latérale et cliquez sur **'🚀 Appliquer l'analyse'** pour commencer.")
 
 else:
-    # Welcome screen
+    # Welcome screen (en markdown)
     st.markdown(f"""
     ## 👋 Bienvenue dans l'outil d'analyse de qualité des données
     
