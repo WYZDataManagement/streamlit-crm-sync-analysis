@@ -9,13 +9,18 @@ from difflib import SequenceMatcher
 import re
 from functools import lru_cache
 
-
-
 st.set_page_config(
     page_title="Diagnostic CRM vs BI",
     page_icon="WYZ-Etoile-Bleu 1.png", 
     layout="wide",
     initial_sidebar_state="expanded"
+)
+
+# Navigation entre les pages
+page = st.sidebar.selectbox(
+    "🗂️ Choisir le mode d'analyse",
+    ["📄 Analyse Simple", "🧩 Analyse Fragmentée"],
+    help="Analyse Simple: 1 fichier (max 200MB)\nAnalyse Fragmentée: Plusieurs fichiers à combiner"
 )
 
 @st.cache_data(show_spinner=False)
@@ -41,6 +46,29 @@ def load_accounts_file(uploaded_file_bytes, file_name):
         df = pd.read_excel(BytesIO(uploaded_file_bytes), engine='openpyxl')
     
     return df
+
+def combine_dataframes(dataframes_list):
+    """Combine multiple dataframes intelligently."""
+    if not dataframes_list:
+        return pd.DataFrame()
+    
+    if len(dataframes_list) == 1:
+        return dataframes_list[0]
+    
+    # Vérifier que toutes les DataFrames ont les mêmes colonnes
+    base_columns = set(dataframes_list[0].columns)
+    all_same_columns = all(set(df.columns) == base_columns for df in dataframes_list)
+    
+    if all_same_columns:
+        # Concaténation simple si même structure
+        combined_df = pd.concat(dataframes_list, ignore_index=True)
+        st.success(f"✅ {len(dataframes_list)} fichiers combinés avec succès ({len(combined_df)} lignes au total)")
+    else:
+        # Concaténation avec union des colonnes si structures différentes
+        combined_df = pd.concat(dataframes_list, ignore_index=True, sort=False)
+        st.warning(f"⚠️ Les fichiers ont des structures différentes. {len(dataframes_list)} fichiers combinés avec union des colonnes.")
+    
+    return combined_df
 
 def normalize_bool(val):
     """Return True if val looks like a positive boolean."""
@@ -79,7 +107,6 @@ def compute_comprehensive_analysis(data):
         has_nomatch_per_row = pd.Series(False, index=data.index)
         
         for col in eq_cols:
-
             col_values = data[col].astype(str).str.strip().str.lower()
             no_match_series = col_values.isin({"no match", "nomatch", "no_match", "false", "0", "no", "n", "f"})
             has_nomatch_per_row |= no_match_series
@@ -88,12 +115,9 @@ def compute_comprehensive_analysis(data):
     
     rows_iso = total_rows - rows_with_nomatch
     
-
     for col in eq_cols:
-
         col_index = data.columns.get_loc(col)
         
-
         if col_index < 2:
             continue
             
@@ -109,10 +133,8 @@ def compute_comprehensive_analysis(data):
             crm_col = col_before_2
             bi_col = col_before_1
         else:
-
             continue
         
-
         match_series = data[col].apply(normalize_bool)
         match_count = int(match_series.sum())
         
@@ -137,29 +159,23 @@ def compute_comprehensive_analysis(data):
         }
         
         if no_match_count > 0:
-
             no_match_mask = ~match_series & ~both_null_series
             no_match_data = data[no_match_mask]
             
             debug_info['filtered_count'] = len(no_match_data)
             
             if len(no_match_data) > 0:
-
                 sample_cols = [crm_col, bi_col, col]
                 debug_info['sample_data'] = no_match_data[sample_cols].head(10)
                 
-
                 for idx, row in no_match_data.iterrows():
                     crm_val = row[crm_col]
                     bi_val = row[bi_col]
                     
-
                     if (pd.isna(crm_val) or str(crm_val).strip() == '') and (pd.notna(bi_val) and str(bi_val).strip() != ''):
                         crm_null_bi_value += 1
-
                     elif (pd.isna(bi_val) or str(bi_val).strip() == '') and (pd.notna(crm_val) and str(crm_val).strip() != ''):
                         bi_null_crm_value += 1
-
                     elif (pd.notna(crm_val) and str(crm_val).strip() != '') and (pd.notna(bi_val) and str(bi_val).strip() != ''):
                         different_values += 1
                     else:
@@ -196,7 +212,6 @@ def compute_comprehensive_analysis(data):
     field_stats_df = pd.DataFrame(field_stats)
     detailed_stats_df = pd.DataFrame(detailed_stats)
     
-
     total_match = int(field_stats_df['match'].sum()) if not field_stats_df.empty else 0
     total_both_null = int(field_stats_df['both_null'].sum()) if not field_stats_df.empty else 0
     total_crm_null = int(detailed_stats_df['crm_null_bi_value'].sum()) if not detailed_stats_df.empty else 0
@@ -222,7 +237,6 @@ def create_quality_metrics_dashboard(field_stats_df, overall_stats):
     """Create quality metrics dashboard with detailed breakdown."""
     st.markdown("## 📊 Métriques de qualité globales")
     
-
     total_match = overall_stats.get('total_match', 0)
     total_both_null = overall_stats.get('total_both_null', 0)
     total_crm_null = overall_stats.get('total_crm_null', 0)
@@ -389,52 +403,53 @@ def create_advanced_analytics(df, field_stats_df, detailed_stats_df):
     st.markdown("### 🎯 Matrice de priorisation")
     
     try:
-
         df_priority = detailed_stats_df.copy()
         df_priority['total_records'] = (df_priority['match'] + df_priority['both_null'] + 
                                       df_priority['crm_null_bi_value'] + df_priority['bi_null_crm_value'] + 
                                       df_priority['different_values'])
         
-
         df_priority['total_records'] = df_priority['total_records'].replace(0, 1)
         
-        # Règle 1: Plus de Both Null = Plus de complexité
-        df_priority['both_null_rate'] = df_priority['both_null'] / df_priority['total_records']
-        
-        # Règle 2: Plus de valeurs différentes = Plus d'impact métier  
+        # NOUVELLE LOGIQUE: Plus de different_values = Plus de complexité
         df_priority['different_values_rate'] = df_priority['different_values'] / df_priority['total_records']
         
-
+        # NOUVELLE LOGIQUE: Plus de valeurs nulles (CRM ou BI) = Plus d'impact métier  
+        df_priority['null_values_rate'] = (df_priority['crm_null_bi_value'] + df_priority['bi_null_crm_value']) / df_priority['total_records']
+        
         df_priority['fix_complexity'] = np.where(
-            df_priority['both_null_rate'] == 0, 1,  # Pas de Both Null = facile
-            np.where(df_priority['both_null_rate'] <= 0.1, 2,  # Peu de Both Null = assez facile
-            np.where(df_priority['both_null_rate'] <= 0.3, 3,  # Moyen
-            np.where(df_priority['both_null_rate'] <= 0.6, 4, 5)))  # Beaucoup = difficile
+            df_priority['different_values_rate'] == 0, 1,  # Pas de valeurs différentes = facile
+            np.where(df_priority['different_values_rate'] <= 0.1, 2,  # Peu de valeurs différentes = assez facile
+            np.where(df_priority['different_values_rate'] <= 0.3, 3,  # Moyen
+            np.where(df_priority['different_values_rate'] <= 0.6, 4, 5)))  # Beaucoup = difficile
         )
         
-
-        df_priority['business_impact'] = df_priority['different_values_rate'] * 5
+        df_priority['business_impact'] = df_priority['null_values_rate'] * 5
         
         fig_priority = px.scatter(
             df_priority,
             x='fix_complexity',
             y='business_impact',
-            size='different_values',
-            hover_data=['field', 'both_null_rate', 'different_values_rate'],
+            hover_data=['field', 'different_values_rate', 'null_values_rate'],
             title="🎯 Matrice de priorisation (Impact métier vs Complexité de correction)",
             labels={
                 'fix_complexity': 'Complexité de correction (1=facile, 5=difficile)',
-                'business_impact': 'Impact métier (basé sur valeurs différentes)'
+                'business_impact': 'Impact métier (basé sur valeurs nulles CRM/BI)'
             },
             color='business_impact',
             color_continuous_scale=[[0, "#7fbfdc"], [0.5, "#78b495"], [1, "#82b86a"]]
         )
         
-
+        # Tous les points ont la même taille
+        fig_priority.update_traces(
+            marker=dict(
+                size=12,  # Taille fixe pour tous les points
+                line=dict(width=1, color='white')  # Bordure blanche pour mieux voir les points
+            )
+        )
+        
         fig_priority.add_hline(y=2.5, line_dash="dash", line_color="gray", annotation_text="Impact moyen")
         fig_priority.add_vline(x=3, line_dash="dash", line_color="gray", annotation_text="Complexité moyenne")
         
-
         fig_priority.add_annotation(x=1.5, y=4, text="🚨 PRIORITÉ MAX<br>(Facile + Impact élevé)", 
                                    bgcolor="rgba(255,0,0,0.1)", bordercolor="red")
         fig_priority.add_annotation(x=4.5, y=4, text="🎯 PLANIFIER<br>(Difficile + Impact élevé)", 
@@ -495,17 +510,38 @@ st.markdown("""
 ### Diagnostic complet pour l'amélioration de la correspondance des données
 """)
 
-# Sidebar avec bouton Appliquer
+# Sidebar avec logique conditionnelle selon le mode
 with st.sidebar:
-    st.markdown("## 📁 Upload de fichier")
-    uploaded_file = st.file_uploader(
-        "Choisir un fichier de comparaison",
-        type=["xlsx", "csv"],
-        help="Fichier Excel ou CSV contenant les comparaisons CRM vs BI"
-    )
+    st.markdown("## 📁 Upload de fichier(s)")
     
-    if uploaded_file:
-        st.success(f"✅ Fichier chargé: {uploaded_file.name}")
+    if page == "📄 Analyse Simple":
+        # Mode Analyse Simple - 1 seul fichier
+        uploaded_file = st.file_uploader(
+            "Choisir un fichier de comparaison",
+            type=["xlsx", "csv"],
+            help="Fichier Excel ou CSV contenant les comparaisons CRM vs BI (max 200MB)"
+        )
+        uploaded_files = [uploaded_file] if uploaded_file else []
+        
+    else:  # Mode Analyse Fragmentée
+        # Mode Analyse Fragmentée - plusieurs fichiers
+        uploaded_files = st.file_uploader(
+            "Choisir plusieurs fichiers à combiner",
+            type=["xlsx", "csv"],
+            help="Sélectionnez plusieurs fichiers Excel ou CSV à analyser ensemble",
+            accept_multiple_files=True
+        )
+        uploaded_file = None  # Pour la compatibilité avec le reste du code
+    
+    # Affichage des fichiers uploadés
+    if uploaded_files and any(f is not None for f in uploaded_files):
+        valid_files = [f for f in uploaded_files if f is not None]
+        if len(valid_files) == 1:
+            st.success(f"✅ Fichier chargé: {valid_files[0].name}")
+        else:
+            st.success(f"✅ {len(valid_files)} fichiers chargés:")
+            for i, file in enumerate(valid_files, 1):
+                st.write(f"   {i}. {file.name}")
         
         st.markdown("## ⚙️ Options d'analyse")
         show_quality_metrics = st.checkbox("📊 Métriques de qualité globales", value=True)
@@ -517,8 +553,8 @@ with st.sidebar:
         selected_fields = []
         if show_field_by_field:
             st.markdown("### 🎯 Sélection des champs")
-            if 'df_loaded' in st.session_state:
-                df = st.session_state.df_loaded
+            if 'df_combined' in st.session_state:
+                df = st.session_state.df_combined
                 eq_cols = [c for c in df.columns if "IsEquals" in c or "IsEqual" in c]
                 selected_fields = st.multiselect(
                     "Choisir les champs à analyser en détail:",
@@ -527,19 +563,18 @@ with st.sidebar:
                     help="Sélectionnez les colonnes IsEquals que vous voulez analyser"
                 )
             else:
-                st.info("Veuillez d'abord charger un fichier pour voir les champs disponibles")
+                st.info("Veuillez d'abord charger un/des fichier(s) pour voir les champs disponibles")
         
         st.markdown("---")
         
         # Bouton 
         apply_analysis = st.button(
-            " Appliquer l'analyse", 
+            "🚀 Appliquer l'analyse", 
             type="primary",
             use_container_width=True,
             help="Lancer l'analyse avec les options sélectionnées"
         )
         
-
         if 'analysis_applied' not in st.session_state:
             st.session_state.analysis_applied = False
         
@@ -551,37 +586,72 @@ with st.sidebar:
             st.session_state.show_field_by_field = show_field_by_field
             st.session_state.selected_fields = selected_fields
 
-
-if uploaded_file is not None and st.session_state.get('analysis_applied', False):
+# Logique de traitement des données
+if uploaded_files and any(f is not None for f in uploaded_files) and st.session_state.get('analysis_applied', False):
     try:
-
-        if 'df_loaded' not in st.session_state or st.session_state.get('last_file_name') != uploaded_file.name:
-            with st.spinner("🔄 Chargement du fichier..."):
-                file_bytes = uploaded_file.read()
-                uploaded_file.seek(0)  
-                df = load_accounts_file(file_bytes, uploaded_file.name)
-                st.session_state.df_loaded = df
-                st.session_state.last_file_name = uploaded_file.name
-        else:
-            df = st.session_state.df_loaded
+        valid_files = [f for f in uploaded_files if f is not None]
         
-
+        # Vérifier si on doit recharger les données
+        current_file_names = [f.name for f in valid_files]
+        should_reload = (
+            'df_combined' not in st.session_state or 
+            st.session_state.get('last_file_names', []) != current_file_names
+        )
+        
+        if should_reload:
+            with st.spinner("🔄 Chargement et combinaison des fichiers..."):
+                dataframes_list = []
+                
+                for file in valid_files:
+                    file_bytes = file.read()
+                    file.seek(0)  # Reset file pointer for potential reuse
+                    df_temp = load_accounts_file(file_bytes, file.name)
+                    dataframes_list.append(df_temp)
+                    st.success(f"✅ {file.name} chargé: {len(df_temp)} lignes")
+                
+                # Combiner les DataFrames
+                df_combined = combine_dataframes(dataframes_list)
+                st.session_state.df_combined = df_combined
+                st.session_state.last_file_names = current_file_names
+        else:
+            df_combined = st.session_state.df_combined
+        
+        # Analyse des données combinées
         with st.spinner("⚡ Analyse en cours..."):
-            overall_stats, row_stats, field_stats_df, detailed_stats_df, field_debug_data = compute_comprehensive_analysis(df)
+            overall_stats, row_stats, field_stats_df, detailed_stats_df, field_debug_data = compute_comprehensive_analysis(df_combined)
         
         # Métriques de base
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("📊 Total lignes", f"{len(df):,}")
+            st.metric("📊 Total lignes", f"{len(df_combined):,}")
         with col2:
-            eq_cols = [c for c in df.columns if "IsEquals" in c]
+            eq_cols = [c for c in df_combined.columns if "IsEquals" in c]
             st.metric("🔗 Champs comparés", len(eq_cols))
         with col3:
             st.metric("🚨 Lignes avec au moins 1 écart", f"{row_stats.get('rows_with_nomatch', 0):,}")
         with col4:
             st.metric("✅ Lignes ISO", f"{row_stats.get('rows_iso', 0):,}")
         
-        # Analyses conditionnelles basées sur les options
+        if page == "🧩 Analyse Fragmentée" and len(valid_files) > 1:
+            with st.expander("📋 Détails des fichiers traités"):
+                files_info = []
+                start_idx = 0
+                for i, file in enumerate(valid_files):
+                    file_bytes = file.read()
+                    file.seek(0)
+                    df_temp = load_accounts_file(file_bytes, file.name)
+                    end_idx = start_idx + len(df_temp)
+                    files_info.append({
+                        'Fichier': file.name,
+                        'Lignes': len(df_temp),
+                        'Colonnes': len(df_temp.columns),
+                        'Plage dans fichier combiné': f"{start_idx + 1} - {end_idx}"
+                    })
+                    start_idx = end_idx
+                
+                st.dataframe(pd.DataFrame(files_info), use_container_width=True)
+        
+
         if st.session_state.get('show_quality_metrics', True) and overall_stats:
             create_quality_metrics_dashboard(field_stats_df, overall_stats)
         
@@ -589,7 +659,7 @@ if uploaded_file is not None and st.session_state.get('analysis_applied', False)
             create_field_analysis_charts(field_stats_df)
         
         if st.session_state.get('show_advanced', True) and not field_stats_df.empty:
-            create_advanced_analytics(df, field_stats_df, detailed_stats_df)
+            create_advanced_analytics(df_combined, field_stats_df, detailed_stats_df)
         
         if st.session_state.get('show_field_by_field', False):
             selected_fields = st.session_state.get('selected_fields', [])
@@ -602,34 +672,43 @@ if uploaded_file is not None and st.session_state.get('analysis_applied', False)
             st.dataframe(field_stats_df, use_container_width=True)
         
         with st.expander("🔍 Échantillon des données brutes"):
-            st.dataframe(df.head(20), use_container_width=True)
+            st.dataframe(df_combined.head(20), use_container_width=True)
     
     except Exception as e:
-        st.error(f"❌ Erreur lors du traitement du fichier: {str(e)}")
-        st.info("💡 Vérifiez le format de votre fichier et réessayez.")
+        st.error(f"❌ Erreur lors du traitement du/des fichier(s): {str(e)}")
+        st.info("💡 Vérifiez le format de vos fichiers et réessayez.")
         
         with st.expander("🔍 Informations de débogage"):
             st.code(f"Type d'erreur: {type(e).__name__}")
             st.code(f"Message: {str(e)}")
 
-elif uploaded_file is not None and not st.session_state.get('analysis_applied', False):
-    st.info("👆 Configurez vos options d'analyse dans la barre latérale et cliquez sur **' Appliquer l'analyse'** pour commencer.")
+elif uploaded_files and any(f is not None for f in uploaded_files) and not st.session_state.get('analysis_applied', False):
+    st.info("👆 Configurez vos options d'analyse dans la barre latérale et cliquez sur **'🚀 Appliquer l'analyse'** pour commencer.")
 
 else:
     # Welcome screen
-    st.markdown("""
+    st.markdown(f"""
     ## 👋 Bienvenue dans l'outil d'analyse de qualité des données
+    
+    **Mode actuel: {page}**
     
     Cet outil vous permet d'analyser la qualité de correspondance entre vos données CRM et BI.
     
-    ###  Pour commencer :
-    1. **📁 Uploadez votre fichier** dans la barre latérale (Excel ou CSV)
+    ### 🔄 Pour commencer :
+    1. **📁 Uploadez votre/vos fichier(s)** dans la barre latérale (Excel ou CSV)
+       - **Analyse Simple**: 1 seul fichier (max 200MB)
+       - **Analyse Fragmentée**: Plusieurs fichiers à combiner automatiquement
     2. **⚙️ Configurez les options** d'analyse selon vos besoins
     3. **🚀 Cliquez sur "Appliquer l'analyse"** pour lancer le traitement
     4. **📊 Explorez les résultats** avec les graphiques interactifs
     
-    ### Optimisations de performance :
-    - 🔄 **Ce code n'est pas le plus optimisé possible, il est donc possible que la première analyse prenne 1 minute pour générer les différents graphiques**
-    """)
+    ### 💡 Avantages de l'analyse fragmentée :
+    - **🔗 Combinaison automatique** de plusieurs fichiers
+    - **📊 Analyse globale** sur l'ensemble des données
+    - **🎯 Gestion intelligente** des structures différentes
+    - **⚡ Performance optimisée** pour de gros volumes
     
-   
+    ### ⚠️ Optimisations de performance :
+    - 🔄 **La première analyse peut prendre 1 minute** pour générer les différents graphiques
+    - 💾 Les données sont mises en cache pour accélérer les analyses suivantes
+    """)
