@@ -1,6 +1,6 @@
 # Diagnostic CRM vs BI
 
-Cet outil Streamlit analyse la correspondance entre les données issues d'un CRM et celles provenant d'un outil de Business Intelligence (BI). Le script `streamlit_app.py` permet de comparer un ou plusieurs fichiers de données et de visualiser plusieurs indicateurs de qualité à l'aide de graphiques interactifs.
+Cet outil Streamlit analyse la correspondance entre les données issues d'un CRM et celles provenant de la BI. Le script `streamlit_app.py` permet de comparer un ou plusieurs fichiers de données et de visualiser plusieurs indicateurs de qualité à l'aide de graphiques interactifs.
 
 ## Fonctionnement général
 
@@ -25,19 +25,10 @@ Cet outil Streamlit analyse la correspondance entre les données issues d'un CRM
 - **Analyse champ par champ** *(optionnelle)* :
   - Tableau d'exemples de lignes en écart pour chaque champ sélectionné avec des métriques précises.
 
-Chaque tableau ou graphique est généré grâce à Plotly et mis en cache pour accélérer les analyses suivantes.
+Chaque tableau ou graphique est généré grâce à Plotly et mis en cache 
 
-## Installation
 
-```bash
-pip install -r requirements.txt
-```
-
-## Lancer l'application
-
-```bash
-streamlit run streamlit_app.py
-```
+## Tuto
 
 1. Choisissez le mode **Analyse Simple** ou **Analyse Fragmentée** dans la barre latérale.
 2. Téléversez vos fichiers CSV ou Excel.
@@ -48,18 +39,4 @@ Lors du premier lancement, le calcul peut prendre un peu de temps. Les données 
 
 ## Personnalisation
 
-Le thème est défini dans [`.streamlit/config.toml`](.streamlit/config.toml). Vous pouvez modifier les couleurs ou la police selon vos besoins.
-
-## Principales dépendances
-
-- `streamlit`
-- `pandas`
-- `plotly`
-- `numpy`
-- `openpyxl`
-
-La liste complète figure dans [`requirements.txt`](requirements.txt).
-
-## Licence
-
-Ce projet est fourni à titre d'exemple et peut être adapté librement.
+Le thème de WYZ est défini dans [`.streamlit/config.toml`](.streamlit/config.toml).
